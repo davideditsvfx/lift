@@ -2,7 +2,7 @@
 /* gym: daily weigh-in + workout tracker with planned progression.
    Data lives on the device (localStorage), with optional automatic backup to a private GitHub repo. */
 
-const VERSION = '2.5';
+const VERSION = '2.6';
 const KEY = 'gym.v2';
 const OLD_KEY = 'lift.v1';
 const SYNC_KEY = 'gym.sync';
@@ -292,6 +292,7 @@ const ui = {
   pickQ: '', pickSel: [], pickCb: null,
 };
 const scrollMem = {};
+let peekT;
 let renderedDay = dayKey();
 const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 
@@ -363,7 +364,7 @@ function tipHTML() {
 }
 
 function scWorkout() {
-  return nav({ title: 'workout', right: `<button class="icon-btn" data-a="settings" aria-label="Settings">${I.gear}</button>` }) +
+  return nav({ title: 'workout', right: `<button class="icon-btn peek" data-a="peek" aria-label="Settings">${I.gear}</button>` }) +
     `<div class="kicker">${shortDay(Date.now())}</div>` +
     `<div class="plans">${S.plans.map(p => `<button class="plan-row" data-a="plan-go" data-id="${p.id}"><span>${esc(p.name || 'untitled')}</span>${I.arrowR}</button>`).join('') ||
       `<div class="empty"><b>No plans yet</b>Add one in settings.</div>`}</div>` + tipHTML();
@@ -474,7 +475,7 @@ function scProgress() {
   return head +
     `<div class="section"><div class="card hero"><div class="cap">stronger since ${fmtDate(st[0].t, { day: 'numeric', month: 'short' })}</div>
       <div class="big">${now.v >= 0 ? '+' : '−'}${Math.abs(now.v).toFixed(1)}<small>%</small></div>
-      <div class="chart">${chart(st, { fmt: v => `${Math.round(v)}%` })}</div></div></div>` +
+      <div class="chart">${chart(st, { fmt: v => `${Math.round(v)}%`, color: 'var(--win)' })}</div></div></div>` +
     `<div class="section"><div class="list">${rows.map(({ e, ss }) => {
     const last = ss[ss.length - 1], cutoff = last.t - 56 * 864e5;
     const base = ss.find(s => s.t >= cutoff) || ss[0];
@@ -500,7 +501,7 @@ function scExercise({ id }) {
   return head +
     `<div class="section"><div class="card"><div class="cap">next session</div><div class="targets">${tg.map((t, i) => `<div><span class="n">${i + 1}</span><b>${setText(t)}</b><span class="rg">${esc(sc[i])} reps</span></div>`).join('')}</div><div class="milestone">${milestone}</div></div></div>` +
     `<div class="section"><div class="card"><div class="seg">${[['top', bw ? 'set 1 reps' : 'set 1 weight'], ['e1rm', 'est. 1-rep max']].map(([k, l]) => `<button class="${ui.metric === k ? 'on' : ''}" data-a="metric" data-m="${k}">${l}</button>`).join('')}</div>
-      <div class="chart">${chart(ss.map(s => ({ t: s.t, v: metric(s.sets[0]) })), { proj: proj.map(p => ({ t: p.t, v: metric(p.sets[0]) })), step: top, smooth: false, fmt: v => (top && !bw ? fLoad(round2(v)) : String(Math.round(v))) })}</div>
+      <div class="chart">${chart(ss.map(s => ({ t: s.t, v: metric(s.sets[0]) })), { proj: proj.map(p => ({ t: p.t, v: metric(p.sets[0]) })), step: top, smooth: false, color: 'var(--win)', fmt: v => (top && !bw ? fLoad(round2(v)) : String(Math.round(v))) })}</div>
       <div class="legend"><span><i></i>done</span><span><i class="dash"></i>plan</span></div></div></div>` +
     `<div class="section-label">sessions</div><div class="section"><div class="list">${[...ss].reverse().map(s =>
       `<button class="row" data-a="hist-open" data-id="${s.wid}"><div class="grow"><div class="title">${shortDay(s.t)}</div><div class="sub">${s.sets.map(setText).join(' · ')}</div></div><span class="chev">${I.chevR}</span></button>`).join('')}</div></div>`;
@@ -558,7 +559,7 @@ function smoothPath(pts) {
   return d;
 }
 
-function chart(points, { proj = [], step = false, smooth = true, fmt = f1 } = {}) {
+function chart(points, { proj = [], step = false, smooth = true, fmt = f1, color = 'var(--pop)' } = {}) {
   const all = points.concat(proj);
   if (!points.length || all.length < 2) return `<div class="chart-empty">${points.length ? 'Log another day to see your trend.' : 'No weigh-ins in this range yet.'}</div>`;
   const W = 340, H = 170, L = 4, R = 46, T = 12, B = 26, f = n => n.toFixed(1);
@@ -583,16 +584,16 @@ function chart(points, { proj = [], step = false, smooth = true, fmt = f1 } = {}
     const y = f(Y(v));
     grid += `<line x1="${L}" x2="${W - R + 6}" y1="${y}" y2="${y}" style="stroke:var(--sep)" stroke-dasharray="2 4"/><text x="${W - R + 10}" y="${+y + 4}">${fmt(round2(v))}</text>`;
   }
-  const dots = points.length <= 45 ? pts.map(p => `<circle cx="${f(p[0])}" cy="${f(p[1])}" r="2.4" style="fill:var(--pop);opacity:.7"/>`).join('') : '';
+  const dots = points.length <= 45 ? pts.map(p => `<circle cx="${f(p[0])}" cy="${f(p[1])}" r="2.4" style="fill:${color};opacity:.7"/>`).join('') : '';
   const area = pts.length > 1 ? `<path d="${line}L${f(lp[0])},${H - B}L${f(pts[0][0])},${H - B}Z" style="fill:url(#cg)"/>` : '';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Trend chart">
-    <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--pop);stop-opacity:.28"/><stop offset="1" style="stop-color:var(--pop);stop-opacity:0"/></linearGradient><filter id="gl" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="4"/></filter></defs>
+    <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${color};stop-opacity:.28"/><stop offset="1" style="stop-color:${color};stop-opacity:0"/></linearGradient><filter id="gl" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="4"/></filter></defs>
     ${grid}${area}
     ${plan ? `<path d="${plan}" fill="none" style="stroke:var(--label2)" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
-    <path d="${line}" fill="none" style="stroke:var(--pop)" stroke-width="5" opacity=".6" filter="url(#gl)"/>
-    <path d="${line}" fill="none" style="stroke:var(--pop)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${line}" fill="none" style="stroke:${color}" stroke-width="5" opacity=".6" filter="url(#gl)"/>
+    <path d="${line}" fill="none" style="stroke:${color}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
     ${dots}
-    <circle cx="${f(lp[0])}" cy="${f(lp[1])}" r="5.5" style="fill:var(--pop);stroke:var(--card)" stroke-width="3"/>
+    <circle cx="${f(lp[0])}" cy="${f(lp[1])}" r="5.5" style="fill:${color};stroke:var(--card)" stroke-width="3"/>
     <text x="${L}" y="${H - 6}">${fmtDate(t0, { day: 'numeric', month: 'short' })}</text>
     <text x="${W - R}" y="${H - 6}" text-anchor="end">${fmtDate(t1, { day: 'numeric', month: 'short' })}</text>
   </svg>`;
@@ -843,7 +844,7 @@ function scActive() {
   return nav({ title: a.name, left: `<div class="wk-clock"><span class="pulse"></span><span data-elapsed>${clock(Date.now() - a.start)}</span></div>`, right: `<button class="btn btn-sm wk-finish" data-a="wk-finish">finish</button>` }) +
     `<div class="kicker">${shortDay(a.start)} · ${hhmm(a.start)}</div><button class="wk-name" data-a="wk-rename">${esc(a.name)}</button>` +
     a.exercises.map(exBlock).join('') +
-    `<div class="adder"><div class="search">${I.search}<input id="wk-q" placeholder="add exercise" value="${esc(ui.wkQ)}" autocomplete="off" autocapitalize="none" enterkeyhint="done"></div><div class="bubbles" id="bubbles">${bubbles(a)}</div></div>` +
+    `<div class="adder"><div class="search">${I.search}<input id="wk-q" placeholder="find exercise" value="${esc(ui.wkQ)}" autocomplete="off" autocapitalize="none" enterkeyhint="done"></div><div id="pick-rows">${pickRows(a)}</div></div>` +
     `<div class="section"><button class="btn btn-plain red" data-a="wk-discard">Discard workout</button></div>`;
 }
 function renderWorkout() {
@@ -851,16 +852,20 @@ function renderWorkout() {
   ui.flash = null;
 }
 
-// Quick picks for the next exercise: the plan's exercises in plan order (big lifts first), or anything by typing.
-function bubbles(a) {
+// The next exercise: the plan's exercises grouped by muscle, in plan order, or anything by typing.
+function pickRows(a) {
   const p = a.planId && planById(a.planId), q = ui.wkQ.trim().toLowerCase();
   const inWk = new Set(a.exercises.map(e => e.exId));
   const planIds = p ? [...new Set(p.blocks.flatMap(b => b.options))].filter(exById) : [];
-  let ids = q ? [...planIds, ...S.exercises.map(e => e.id).filter(id => !planIds.includes(id))].filter(id => exName(id).toLowerCase().includes(q)).slice(0, 12) : planIds;
-  ids = ids.filter(id => !inWk.has(id));
+  const ids = (q ? [...planIds, ...S.exercises.map(e => e.id).filter(id => !planIds.includes(id))].filter(id => exName(id).toLowerCase().includes(q)) : planIds)
+    .filter(id => !inWk.has(id));
   const blockOfEx = id => p?.blocks.find(b => b.options.includes(id))?.id || '';
-  return ids.map(id => `<button class="bubble" data-a="wk-pick" data-id="${id}" data-b="${blockOfEx(id)}">${esc(exName(id))}</button>`).join('') +
-    (q && !S.exercises.some(e => e.name.toLowerCase() === q) ? `<button class="bubble new" data-a="wk-create">${I.plus}${esc(ui.wkQ.trim())}</button>` : '');
+  const groups = new Map();
+  for (const id of ids) { const m = exById(id).muscle || 'Other'; groups.set(m, [...(groups.get(m) || []), id]); }
+  let h = [...groups].map(([m, list]) => `<div class="section-label">${esc(m)}</div><div class="list">${list.map(id =>
+    `<button class="row pick-ex" data-a="wk-pick" data-id="${id}" data-b="${blockOfEx(id)}"><div class="grow title">${esc(exName(id))}</div><span class="add">${I.plus}</span></button>`).join('')}</div>`).join('');
+  if (q && !S.exercises.some(e => e.name.toLowerCase() === q)) h += `<div class="section-label">new</div><div class="list"><button class="row accent" data-a="wk-create"><div class="grow title">Create “${esc(ui.wkQ.trim())}”</div></button></div>`;
+  return h || (q ? '<div class="empty">Nothing matches.</div>' : '');
 }
 
 function exBlock(ex, ei) {
@@ -1040,6 +1045,12 @@ const A = {
   },
   back,
   settings: () => push({ name: 'settings' }),
+  // Settings stay out of sight: the first tap in the corner shows the gear, a second opens them.
+  peek: (d, el) => {
+    if (el.classList.contains('on')) return push({ name: 'settings' });
+    el.classList.add('on'); clearTimeout(peekT);
+    peekT = setTimeout(() => el.classList.remove('on'), 3000);
+  },
   library: () => { ui.libQ = ''; push({ name: 'library' }); },
   'tip-close': () => { lsSet(TIP_KEY, '1'); renderScreen(); },
 
@@ -1287,7 +1298,7 @@ document.addEventListener('input', e => {
     const ex = exById(d.id);
     if (ex && t.value.trim()) { ex.scheme = schemeOf(ex).map((rg, i) => (i === +d.scheme ? t.value.trim() : rg)); saveSoon(); }
   } else if (t.id === 'wk-q') {
-    ui.wkQ = t.value; $('#bubbles').innerHTML = S.active ? bubbles(S.active) : '';
+    ui.wkQ = t.value; $('#pick-rows').innerHTML = S.active ? pickRows(S.active) : '';
   } else if (t.id === 'pick-q') {
     ui.pickQ = t.value; $('#pick-list').innerHTML = pickList();
   } else if (t.id === 'lib-q') {
