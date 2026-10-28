@@ -2,7 +2,7 @@
 /* gym: daily weigh-in + workout tracker with planned progression.
    Data lives on the device (localStorage), with optional automatic backup to a private GitHub repo. */
 
-const VERSION = '2.1';
+const VERSION = '2.2';
 const KEY = 'gym.v2';
 const OLD_KEY = 'lift.v1';
 const SYNC_KEY = 'gym.sync';
@@ -366,17 +366,39 @@ function scWorkout() {
   const byAge = [...S.plans].sort((x, y) => lastPlanDone(x.id) - lastPlanDone(y.id));
   const next = S.workouts.length && S.plans.length > 1 ? byAge[0].id : null;
   return nav({ title: 'workout', right: `<button class="icon-btn" data-a="settings" aria-label="Settings">${I.gear}</button>` }) +
-    `<h1 class="large-title">workout</h1>` + tipHTML() +
+    `<div class="kicker">${shortDay(Date.now())}</div><h1 class="large-title">workout</h1>` + tipHTML() +
     (a ? `<button class="resume-card" data-a="wk-open"><span class="pulse"></span><div class="grow"><b>${esc(a.name)}</b><div class="sub">in progress · <span data-elapsed>${clock(Date.now() - a.start)}</span></div></div><span class="btn btn-primary btn-sm">resume</span></button>` : '') +
-    `<div class="section">${S.plans.map(p => planTile(p, next)).join('') || `<div class="card empty"><b>No plans yet</b>Make one for each kind of session you do.</div>`}</div>` +
+    grindCard() +
+    `<div class="section">${S.plans.map((p, i) => planTile(p, next, i)).join('') || `<div class="card empty"><b>No plans yet</b>Make one for each kind of session you do.</div>`}</div>` +
     `<div class="section home-actions"><button class="btn btn-tinted" data-a="start-empty">${I.plus}empty workout</button><button class="btn btn-tinted" data-a="plan-new">${I.plus}new plan</button></div>`;
 }
 
-function planTile(p, next) {
-  const last = lastPlanDone(p.id);
+// Every training day of the last 20 weeks (Monday first), and how many weeks in a row had a session.
+function grindCard() {
+  const WEEKS = 20, today = dayKey();
+  const weekOf = k => addDays(k, -((keyDate(k).getDay() + 6) % 7));
+  const days = new Set(S.workouts.map(w => dayKey(w.start)));
+  const weeks = new Set([...days].map(weekOf)), thisWk = weekOf(today);
+  const start = addDays(thisWk, -(WEEKS - 1) * 7);
+  let cells = '';
+  for (let i = 0; i < WEEKS * 7; i++) {
+    const k = addDays(start, i);
+    cells += `<i class="${k > today ? 'f' : days.has(k) ? 'on' : ''}${k === today ? ' now' : ''}"></i>`;
+  }
+  // This week only counts once it has a session; until then the streak runs up to last week.
+  let wk = weeks.has(thisWk) ? thisWk : addDays(thisWk, -7), streak = 0;
+  while (weeks.has(wk)) { streak++; wk = addDays(wk, -7); }
+  const inWeek = [...days].filter(k => weekOf(k) === thisWk).length;
+  return `<div class="section"><div class="card grind"><div class="grind-top"><div class="big">${streak}<span class="lbl">${streak === 1 ? 'week' : 'weeks'} straight</span></div>` +
+    `<div class="grind-side"><span class="lbl"><b>${inWeek}</b> this week</span><span class="lbl"><b>${S.workouts.length}</b> total</span></div></div><div class="grid">${cells}</div></div></div>`;
+}
+
+function planTile(p, next, i) {
+  const last = lastPlanDone(p.id), isNext = p.id === next;
   const summary = p.blocks.filter(b => b.options.length).map(b => b.name || exName(b.options[0])).join(' · ');
-  return `<div class="plan-tile" role="button" data-a="plan-go" data-id="${p.id}">
-    <div class="top"><h3>${esc(p.name || 'untitled')}</h3>${p.id === next ? '<span class="badge">next</span>' : ''}<button class="dots" data-a="plan-menu" data-id="${p.id}" aria-label="Plan options">${I.dots}</button></div>
+  return `<div class="plan-tile${isNext ? ' next' : ''}" role="button" data-a="plan-go" data-id="${p.id}">
+    <div class="top"><span class="kick">${pad2(i + 1)}${isNext ? ' · next up' : ''}</span><button class="dots" data-a="plan-menu" data-id="${p.id}" aria-label="Plan options">${I.dots}</button></div>
+    <h3>${esc(p.name || 'untitled')}</h3>
     <div class="exs">${esc(summary) || 'No exercises yet'}</div>
     <div class="meta">${last ? `last done ${relDay(dayKey(last)).toLowerCase()}` : 'not done yet'}</div></div>`;
 }
@@ -464,7 +486,7 @@ function spark(values) {
 function scProgress() {
   const rows = S.exercises.map(e => ({ e, ss: sessionsOf(e.id) })).filter(x => x.ss.length)
     .sort((a, b) => b.ss[b.ss.length - 1].t - a.ss[a.ss.length - 1].t);
-  const head = nav({ title: 'progress' }) + `<h1 class="large-title">progress</h1>`;
+  const head = nav({ title: 'progress' }) + `<div class="kicker">${plural(rows.length, 'lift')} tracked</div><h1 class="large-title">progress</h1>`;
   if (!rows.length) return head + `<div class="section"><div class="card empty"><b>Nothing logged yet</b>Finish a workout and every lift shows up here, with its trend and your targets for next time.</div></div>`;
   return head + `<div class="section"><div class="list">${rows.map(({ e, ss }) => {
     const last = ss[ss.length - 1], cutoff = last.t - 56 * 864e5;
@@ -479,7 +501,7 @@ function scExercise({ id }) {
   if (!e) return gone('exercise');
   const ss = sessionsOf(id);
   const head = nav({ title: e.name, back: true, right: `<button class="icon-btn" data-a="ex-edit" data-id="${id}" aria-label="Edit exercise">${I.slider}</button>` }) +
-    `<h1 class="large-title sm">${esc(e.name)}</h1>`;
+    `<div class="kicker">${esc(e.muscle || 'exercise')}</div><h1 class="large-title sm">${esc(e.name)}</h1>`;
   if (!ss.length) return head + `<div class="section"><div class="card empty"><b>No sessions yet</b>Do it once and your targets for next time show up here.</div></div>`;
   const last = ss[ss.length - 1], sc = schemeOf(e), tg = nextTargets(e, last.sets), proj = projection(e, ss);
   const bw = !(last.sets[0].w > 0), top = ui.metric === 'top';
@@ -502,7 +524,7 @@ function scDetail({ id }) {
   if (!w) return gone('workout');
   const prs = new Set(w.prs || []);
   return nav({ title: w.name, back: true }) +
-    `<h1 class="large-title" style="padding-bottom:2px">${esc(w.name)}</h1><div class="section-foot" style="padding:0 20px 18px">${longDay(w.start)} · ${hhmm(w.start)}</div>` +
+    `<div class="kicker">${longDay(w.start)} · ${hhmm(w.start)}</div><h1 class="large-title">${esc(w.name)}</h1>` +
     `<div class="section"><div class="card stats">${stat('Time', dur(w.end - w.start))}${stat('Sets', workoutSets(w))}${w.targets ? stat('Targets hit', `${w.targets.hit}/${w.targets.total}`) : stat('Exercises', w.exercises.length)}</div></div>` +
     w.exercises.map(e => `<div class="section"><div class="sub-head">${esc(exName(e.exId, e.name))}${prs.has(e.exId) ? `<span class="pr">${I.trophy}PR</span>` : ''}</div><div class="list">${e.sets.map((s, i) => `<div class="det-set"><span class="n">${i + 1}</span><span class="num">${s.w ? `${fLoad(s.w)} kg × ${s.r}` : `${s.r} reps`}</span></div>`).join('')}</div></div>`).join('') +
     `<div class="section"><button class="btn btn-plain red" data-a="hist-delete" data-id="${id}">Delete Workout</button></div>`;
@@ -525,7 +547,7 @@ function scWeight() {
   const points = ws.filter(w => w.date >= cutoff).map(w => ({ t: keyDate(w.date).getTime(), v: w.kg }));
   const rows = [...ws].reverse(), shown = ui.weightAll ? rows : rows.slice(0, 30);
   return nav({ title: 'weight', right: `<button class="icon-btn" data-a="weigh-open" data-date="${today}" aria-label="Log weight">${I.plus}</button>` }) +
-    `<h1 class="large-title">weight</h1>` +
+    `<div class="kicker">${plural(ws.length, 'weigh-in')}</div><h1 class="large-title">weight</h1>` +
     `<div class="section"><div class="card hero"><div class="cap">${last ? relDay(last.date) : 'No weigh-ins yet'}</div>
       <div class="big">${last ? f1(last.kg) : '—'}<small>kg</small></div>
       <div class="chips">${chip('7 days', change(7))}${chip('30 days', change(30))}${chip('Total', total)}</div>
@@ -577,9 +599,10 @@ function chart(points, { proj = [], step = false, smooth = true, fmt = f1 } = {}
   const dots = points.length <= 45 ? pts.map(p => `<circle cx="${f(p[0])}" cy="${f(p[1])}" r="2.4" style="fill:var(--label);opacity:.6"/>`).join('') : '';
   const area = pts.length > 1 ? `<path d="${line}L${f(lp[0])},${H - B}L${f(pts[0][0])},${H - B}Z" style="fill:url(#cg)"/>` : '';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Trend chart">
-    <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#fff;stop-opacity:.2"/><stop offset="1" style="stop-color:#fff;stop-opacity:0"/></linearGradient></defs>
+    <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#fff;stop-opacity:.2"/><stop offset="1" style="stop-color:#fff;stop-opacity:0"/></linearGradient><filter id="gl" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="4"/></filter></defs>
     ${grid}${area}
     ${plan ? `<path d="${plan}" fill="none" style="stroke:var(--label2)" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
+    <path d="${line}" fill="none" style="stroke:var(--label)" stroke-width="5" opacity=".45" filter="url(#gl)"/>
     <path d="${line}" fill="none" style="stroke:var(--label)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
     ${dots}
     <circle cx="${f(lp[0])}" cy="${f(lp[1])}" r="5.5" style="fill:var(--label);stroke:var(--card)" stroke-width="3"/>
@@ -669,7 +692,8 @@ function vsText(s) {
   const rel = relDay(s.prev.date), when = rel === 'Yesterday' ? 'yesterday' : rel.includes('ago') ? rel : `on ${rel}`;
   return d === 0 ? `Same as ${when}` : `${d > 0 ? '▲' : '▼'} ${f1(Math.abs(d))} kg from ${when}`;
 }
-const sizeWv = el => { const v = el.value || '0'; el.style.width = `${v.length - (/[.,]/.test(v) ? 0.45 : 0) + 0.15}ch`; };
+// Size the input to its text; --ls is the input's (negative) letter-spacing, applied once per character.
+const sizeWv = el => { const v = el.value || '0'; el.style.width = `calc(${v.length - (/[.,]/.test(v) ? 0.45 : 0) + 0.15}ch + ${v.length} * var(--ls))`; };
 function bindRuler(s) {
   const ruler = $('#ruler'), inp = $('#wv'), vs = $('#wvs');
   const place = () => { ruler.scrollLeft = Math.round((s.val - s.lo) * 10) * RULER_TICK; };
@@ -745,10 +769,10 @@ function shSummary(s) {
     return `<div class="row"><span class="pr">${I.trophy}PR</span><div class="grow title">${esc(exName(id, e.name))}</div><span class="value num">${fLoad(Math.max(...e.sets.map(x => x.w)))} kg</span></div>`;
   }).join('');
   return `<div class="grab-area"><div class="grab"></div></div><div class="sheet-body">
-    <div class="weigh"><div class="done-badge">${I.check}</div><h1>nice work</h1><div class="date">${esc(w.name)} · workout #${S.workouts.indexOf(w) + 1}</div></div>
+    <div class="weigh"><div class="done-badge">${I.check}</div><h1>done.</h1><div class="date">${esc(w.name)} · session #${S.workouts.indexOf(w) + 1}</div></div>
     <div class="section" style="margin-top:18px"><div class="card stats">${stat('Time', dur(w.end - w.start))}${stat('Sets', workoutSets(w))}${w.targets ? stat('Targets hit', `${w.targets.hit}/${w.targets.total}`) : stat('Exercises', w.exercises.length)}</div></div>
     ${prRows ? `<div class="section-label">new personal records</div><div class="section"><div class="list">${prRows}</div></div>` : ''}
-    <div class="section"><button class="btn btn-primary" data-a="sheet-close">done</button></div></div>`;
+    <div class="section"><button class="btn btn-primary" data-a="sheet-close">close</button></div></div>`;
 }
 
 // Cloud backup setup
@@ -857,18 +881,17 @@ function refreshPh(ei) {
   const ex = S.active.exercises[ei];
   ex.sets.forEach((s, si) => { const el = $(`[data-cell="${ei}-${si}-w"]`); if (el) el.placeholder = phW(ex, si); });
 }
-const doneSets = () => S.active.exercises.reduce((a, e) => a + e.sets.filter(s => s.done).length, 0);
-
 function renderWorkout() {
   const a = S.active, body = $('#wk-body');
   if (!a || !ui.wkOpen || !body) return;
   const top = body.scrollTop, next = nextChooser(a);
-  $('#wk-head').innerHTML = `<div class="bar"><button class="icon-btn" data-a="wk-min" aria-label="Minimise">${I.chevD}</button><button class="wk-title" data-a="wk-rename"><b>${esc(a.name)}</b><span data-elapsed>${clock(Date.now() - a.start)}</span></button><button class="btn btn-primary btn-sm" style="height:40px;border-radius:20px;padding:0 18px" data-a="wk-finish">finish</button></div>`;
-  body.innerHTML = `<div class="wk-stats">${stat('Sets done', doneSets())}${stat('Exercises', a.exercises.length)}</div>` +
+  $('#wk-head').innerHTML = `<div class="bar"><button class="icon-btn" data-a="wk-min" aria-label="Minimise">${I.chevD}</button><div class="wk-clock"><span class="pulse"></span><span data-elapsed>${clock(Date.now() - a.start)}</span></div><button class="btn btn-primary btn-sm wk-finish" data-a="wk-finish">finish</button></div>`;
+  body.innerHTML = `<div class="kicker">${shortDay(a.start)} · ${hhmm(a.start)}</div><button class="wk-name" data-a="wk-rename">${esc(a.name)}</button>` +
     a.exercises.map(exBlock).join('') +
     (next || (a.exercises.length ? '' : `<div class="section"><div class="card empty"><b>Empty workout</b>Add the exercises you’re doing today.</div></div>`)) +
     `<div class="section stack" style="margin-top:6px"><button class="btn btn-tinted" data-a="wk-add">${I.plus}${a.planId ? 'other exercise' : 'add exercise'}</button><button class="btn btn-plain red" data-a="wk-discard">Discard workout</button></div>`;
   body.scrollTop = top;
+  ui.flash = null;
 }
 
 // The plan's slots you haven't covered yet, for picking the next exercise as you go.
@@ -889,7 +912,7 @@ function nextChooser(a) {
     const label = b.name || exName(opts[0]);
     const note = want > 0 ? (b.pick > 1 ? `${want} more suggested` : '') : (a.exercises.some(e => e.block === b.id) ? 'done' : 'optional');
     return `<div class="pick-group${want > 0 ? '' : ' dim'}"><div class="block-label"><span>${esc(label)}</span>${note ? `<span>${note}</span>` : ''}</div><div class="list">${opts.map((id, i) =>
-      `<button class="row next-row" data-a="next-pick" data-b="${b.id}" data-id="${id}"><div class="grow"><div class="title">${esc(exName(id))}${i < want ? '<span class="sugg">suggested</span>' : ''}</div><div class="sub">${optionSub(exById(id))}</div></div><span class="add">${I.plus}</span></button>`).join('')}</div></div>`;
+      `<button class="row next-row" data-a="next-pick" data-b="${b.id}" data-id="${id}"><div class="grow"><div class="title"><span class="nm">${esc(exName(id))}</span>${i < want ? '<span class="sugg">suggested</span>' : ''}</div><div class="sub">${optionSub(exById(id))}</div></div><span class="add">${I.plus}</span></button>`).join('')}</div></div>`;
   }).join('');
 }
 
@@ -897,11 +920,11 @@ function exBlock(ex, ei) {
   const e = exById(ex.exId), prev = lastSets(ex.exId);
   const planned = ex.sets.some(s => s.tw != null);
   const sub = planned ? `target ${ex.sets.map(s => setText({ w: s.tw ?? 0, r: s.tr })).join(' · ')}` : `first time · ${schemeOf(e).join(' · ')} reps`;
-  return `<div class="ex"><div class="ex-head"><div class="grow"><span class="ex-name">${esc(exName(ex.exId))}</span><div class="ex-target">${sub}</div></div><button class="dots" data-a="ex-menu" data-e="${ei}" aria-label="Exercise options">${I.dots}</button></div>
+  return `<div class="ex"><div class="ex-head"><div class="grow"><div class="ex-kick">${pad2(ei + 1)}${e?.muscle ? ` · ${esc(e.muscle)}` : ''}</div><span class="ex-name">${esc(exName(ex.exId))}</span><div class="ex-target">${sub}</div></div><button class="dots" data-a="ex-menu" data-e="${ei}" aria-label="Exercise options">${I.dots}</button></div>
     <div class="set-row head"><span>SET</span><span>LAST</span><span>KG</span><span>REPS</span><span></span></div>
     ${ex.sets.map((s, si) => {
       const pv = prev?.[si];
-      return `<div class="set-row${s.done ? ' done' : ''}${s.done && s.hit === false ? ' miss' : ''}"><button class="set-n" data-a="set-menu" data-e="${ei}" data-s="${si}">${si + 1}</button>
+      return `<div class="set-row${s.done ? ' done' : ''}${s.done && s.hit === false ? ' miss' : ''}${ui.flash === `${ei}-${si}` ? ' just' : ''}"><button class="set-n" data-a="set-menu" data-e="${ei}" data-s="${si}">${si + 1}</button>
         <span class="prev">${pv ? setText(pv) : '—'}</span>
         <input class="cell" data-cell="${ei}-${si}-w" inputmode="decimal" value="${esc(s.w)}" placeholder="${esc(phW(ex, si))}" autocomplete="off" aria-label="Weight">
         <input class="cell" data-cell="${ei}-${si}-r" inputmode="numeric" value="${esc(s.r)}" placeholder="${esc(s.tr ?? '')}" autocomplete="off" aria-label="Reps">
@@ -1188,6 +1211,7 @@ const A = {
     s.r = String(Math.round(r));
     s.done = true;
     s.hit = s.tw != null ? (w || 0) >= s.tw - 1e-6 && r >= s.tr : null;
+    ui.flash = `${d.e}-${si}`;
     haptic(); save(); renderWorkout();
   },
 
