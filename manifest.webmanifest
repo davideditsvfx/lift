@@ -1,6 +1,6 @@
 {
-  "name": "Lift",
-  "short_name": "Lift",
+  "name": "gym",
+  "short_name": "gym",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

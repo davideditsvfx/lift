@@ -18,7 +18,14 @@ def gh(method, url, body=None):
         with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as f:
             json.dump(body, f)
         args += ['-H', 'content-type: application/json', '-d', '@' + f.name]
-    out = subprocess.run(args, capture_output=True, text=True)
+    for attempt in range(3):
+        try:
+            out = subprocess.run(args, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=60)
+            break
+        except subprocess.TimeoutExpired:
+            print(f'  {method} timed out, retrying ({attempt + 1}/3)')
+    else:
+        sys.exit(f'{method} {url} kept timing out')
     try:
         data = json.loads(out.stdout)
     except json.JSONDecodeError:
