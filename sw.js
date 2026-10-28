@@ -1,5 +1,5 @@
 // Bump CACHE when shipping changes so phones pick up the new version.
-const CACHE = 'gym-v4';
+const CACHE = 'gym-v5';
 const ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -19,12 +19,12 @@ self.addEventListener('activate', e => {
 // Stale-while-revalidate: open instantly from cache, refresh it in the background.
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
-  e.respondWith(caches.open(CACHE).then(async cache => {
-    const hit = await cache.match(e.request, { ignoreSearch: true });
-    const net = fetch(e.request).then(res => {
-      if (res.ok) cache.put(e.request, res.clone());
-      return res;
-    }).catch(() => hit);
-    return hit || net;
+  // no-cache asks the server instead of trusting the 10-minute HTTP cache.
+  const net = caches.open(CACHE).then(cache => fetch(e.request.url, { cache: 'no-cache' }).then(res => {
+    if (res.ok) cache.put(e.request, res.clone());
+    return res;
   }));
+  // Keep the worker alive until the cache is refreshed; iOS stops it as soon as the page has its response.
+  e.waitUntil(net.catch(() => {}));
+  e.respondWith(caches.match(e.request, { ignoreSearch: true }).then(hit => hit || net));
 });

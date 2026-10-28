@@ -2,10 +2,11 @@
 /* gym: daily weigh-in + workout tracker with planned progression.
    Data lives on the device (localStorage), with optional automatic backup to a private GitHub repo. */
 
-const VERSION = '2.2';
+const VERSION = '2.3';
 const KEY = 'gym.v2';
 const OLD_KEY = 'lift.v1';
 const SYNC_KEY = 'gym.sync';
+const VER_KEY = 'gym.ver';
 const TIP_KEY = 'gym.tip';
 const BACKUP_PATH = 'gym-backup.json';
 const DEFAULT_REPO = 'davideditsvfx/gym-data';
@@ -368,36 +369,15 @@ function scWorkout() {
   return nav({ title: 'workout', right: `<button class="icon-btn" data-a="settings" aria-label="Settings">${I.gear}</button>` }) +
     `<div class="kicker">${shortDay(Date.now())}</div><h1 class="large-title">workout</h1>` + tipHTML() +
     (a ? `<button class="resume-card" data-a="wk-open"><span class="pulse"></span><div class="grow"><b>${esc(a.name)}</b><div class="sub">in progress · <span data-elapsed>${clock(Date.now() - a.start)}</span></div></div><span class="btn btn-primary btn-sm">resume</span></button>` : '') +
-    grindCard() +
     `<div class="section">${S.plans.map((p, i) => planTile(p, next, i)).join('') || `<div class="card empty"><b>No plans yet</b>Make one for each kind of session you do.</div>`}</div>` +
     `<div class="section home-actions"><button class="btn btn-tinted" data-a="start-empty">${I.plus}empty workout</button><button class="btn btn-tinted" data-a="plan-new">${I.plus}new plan</button></div>`;
-}
-
-// Every training day of the last 20 weeks (Monday first), and how many weeks in a row had a session.
-function grindCard() {
-  const WEEKS = 20, today = dayKey();
-  const weekOf = k => addDays(k, -((keyDate(k).getDay() + 6) % 7));
-  const days = new Set(S.workouts.map(w => dayKey(w.start)));
-  const weeks = new Set([...days].map(weekOf)), thisWk = weekOf(today);
-  const start = addDays(thisWk, -(WEEKS - 1) * 7);
-  let cells = '';
-  for (let i = 0; i < WEEKS * 7; i++) {
-    const k = addDays(start, i);
-    cells += `<i class="${k > today ? 'f' : days.has(k) ? 'on' : ''}${k === today ? ' now' : ''}"></i>`;
-  }
-  // This week only counts once it has a session; until then the streak runs up to last week.
-  let wk = weeks.has(thisWk) ? thisWk : addDays(thisWk, -7), streak = 0;
-  while (weeks.has(wk)) { streak++; wk = addDays(wk, -7); }
-  const inWeek = [...days].filter(k => weekOf(k) === thisWk).length;
-  return `<div class="section"><div class="card grind"><div class="grind-top"><div class="big">${streak}<span class="lbl">${streak === 1 ? 'week' : 'weeks'} straight</span></div>` +
-    `<div class="grind-side"><span class="lbl"><b>${inWeek}</b> this week</span><span class="lbl"><b>${S.workouts.length}</b> total</span></div></div><div class="grid">${cells}</div></div></div>`;
 }
 
 function planTile(p, next, i) {
   const last = lastPlanDone(p.id), isNext = p.id === next;
   const summary = p.blocks.filter(b => b.options.length).map(b => b.name || exName(b.options[0])).join(' · ');
   return `<div class="plan-tile${isNext ? ' next' : ''}" role="button" data-a="plan-go" data-id="${p.id}">
-    <div class="top"><span class="kick">${pad2(i + 1)}${isNext ? ' · next up' : ''}</span><button class="dots" data-a="plan-menu" data-id="${p.id}" aria-label="Plan options">${I.dots}</button></div>
+    <div class="top"><span class="kick">${pad2(i + 1)}${isNext ? ' <span class="nx">· next up</span>' : ''}</span><button class="dots" data-a="plan-menu" data-id="${p.id}" aria-label="Plan options">${I.dots}</button></div>
     <h3>${esc(p.name || 'untitled')}</h3>
     <div class="exs">${esc(summary) || 'No exercises yet'}</div>
     <div class="meta">${last ? `last done ${relDay(dayKey(last)).toLowerCase()}` : 'not done yet'}</div></div>`;
@@ -596,16 +576,16 @@ function chart(points, { proj = [], step = false, smooth = true, fmt = f1 } = {}
     const y = f(Y(v));
     grid += `<line x1="${L}" x2="${W - R + 6}" y1="${y}" y2="${y}" style="stroke:var(--sep)" stroke-dasharray="2 4"/><text x="${W - R + 10}" y="${+y + 4}">${fmt(round2(v))}</text>`;
   }
-  const dots = points.length <= 45 ? pts.map(p => `<circle cx="${f(p[0])}" cy="${f(p[1])}" r="2.4" style="fill:var(--label);opacity:.6"/>`).join('') : '';
+  const dots = points.length <= 45 ? pts.map(p => `<circle cx="${f(p[0])}" cy="${f(p[1])}" r="2.4" style="fill:var(--pop);opacity:.7"/>`).join('') : '';
   const area = pts.length > 1 ? `<path d="${line}L${f(lp[0])},${H - B}L${f(pts[0][0])},${H - B}Z" style="fill:url(#cg)"/>` : '';
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Trend chart">
-    <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:#fff;stop-opacity:.2"/><stop offset="1" style="stop-color:#fff;stop-opacity:0"/></linearGradient><filter id="gl" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="4"/></filter></defs>
+    <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--pop);stop-opacity:.28"/><stop offset="1" style="stop-color:var(--pop);stop-opacity:0"/></linearGradient><filter id="gl" x="-10%" y="-40%" width="120%" height="180%"><feGaussianBlur stdDeviation="4"/></filter></defs>
     ${grid}${area}
     ${plan ? `<path d="${plan}" fill="none" style="stroke:var(--label2)" stroke-width="2" stroke-dasharray="4 5" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
-    <path d="${line}" fill="none" style="stroke:var(--label)" stroke-width="5" opacity=".45" filter="url(#gl)"/>
-    <path d="${line}" fill="none" style="stroke:var(--label)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${line}" fill="none" style="stroke:var(--pop)" stroke-width="5" opacity=".6" filter="url(#gl)"/>
+    <path d="${line}" fill="none" style="stroke:var(--pop)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
     ${dots}
-    <circle cx="${f(lp[0])}" cy="${f(lp[1])}" r="5.5" style="fill:var(--label);stroke:var(--card)" stroke-width="3"/>
+    <circle cx="${f(lp[0])}" cy="${f(lp[1])}" r="5.5" style="fill:var(--pop);stroke:var(--card)" stroke-width="3"/>
     <text x="${L}" y="${H - 6}">${fmtDate(t0, { day: 'numeric', month: 'short' })}</text>
     <text x="${W - R}" y="${H - 6}" text-anchor="end">${fmtDate(t1, { day: 'numeric', month: 'short' })}</text>
   </svg>`;
@@ -693,7 +673,7 @@ function vsText(s) {
   return d === 0 ? `Same as ${when}` : `${d > 0 ? '▲' : '▼'} ${f1(Math.abs(d))} kg from ${when}`;
 }
 // Size the input to its text; --ls is the input's (negative) letter-spacing, applied once per character.
-const sizeWv = el => { const v = el.value || '0'; el.style.width = `calc(${v.length - (/[.,]/.test(v) ? 0.45 : 0) + 0.15}ch + ${v.length} * var(--ls))`; };
+const sizeWv = el => { const v = el.value || '0'; el.style.width = `calc(${v.length - (/[.,]/.test(v) ? 0.62 : 0) + 0.15}ch + ${v.length} * var(--ls))`; };
 function bindRuler(s) {
   const ruler = $('#ruler'), inp = $('#wv'), vs = $('#wvs');
   const place = () => { ruler.scrollLeft = Math.round((s.val - s.lo) * 10) * RULER_TICK; };
@@ -1388,10 +1368,25 @@ setInterval(tick, 1000);
 setTimeout(maybeWeighIn, 450);
 navigator.storage?.persist?.().catch(() => {});
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  // Reload once when a new version takes over, unless that would interrupt something.
+  // Reload once when a new version takes over, or the next time that wouldn't interrupt something.
   const hadController = !!navigator.serviceWorker.controller;
+  const safe = () => !ui.wkOpen && (!ui.sheet || ui.sheet.morning);
+  let waiting = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (hadController && !ui.wkOpen && (!ui.sheet || ui.sheet.morning)) location.reload();
+    if (!hadController) return;
+    if (safe()) location.reload(); else waiting = true;
   });
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // iOS usually resumes the app instead of relaunching it, which skips the browser's own update check.
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      if (waiting && safe()) location.reload(); else reg.update().catch(() => {});
+    });
+  }).catch(() => {});
+}
+// Say so once after an update lands, so it's clear the phone has the new version.
+const lastVer = lsGet(VER_KEY);
+if (lastVer !== VERSION) {
+  lsSet(VER_KEY, VERSION);
+  if (lastVer || S.workouts.length || S.weights.length) setTimeout(() => toast(`updated to gym ${VERSION}`), 700);
 }
