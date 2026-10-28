@@ -50,7 +50,7 @@ svg { display: block; }
 .num { font-variant-numeric: tabular-nums; font-weight: 700; }
 
 /* Display type: upright, bold, tightly tracked. Big numbers go light. Small labels are tracked caps. */
-.large-title, .plan-tile h3, .wk-name, .weigh h1, .targets b, .stat .v, .name-input, .block-name {
+.large-title, .wk-name, .weigh h1, .targets b, .stat .v, .name-input, .block-name {
   font-weight: 700;
 }
 .hero .big, .weigh-num input { font-weight: 300; }
@@ -183,14 +183,15 @@ button.row:active, .row.tap:active { background: var(--fill); }
 .tip b { display: block; font-size: 15px; font-weight: 650; }
 .tip span { display: block; font-size: 13px; color: var(--label2); margin-top: 3px; line-height: 18px; }
 
-.plan-tile {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 104px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 0 18px 0 20px; margin-bottom: 10px; transition: transform .15s;
+/* Home: the plans as big type on hairlines */
+.plans { margin: 26px 20px 28px; border-top: 1px solid var(--line); }
+.plan-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+  padding: 30px 2px; border-bottom: 1px solid var(--line); transition: opacity .15s;
 }
-.plan-tile:active { transform: scale(.98); }
-.plan-tile h3 { margin: 0; font-size: 36px; letter-spacing: -1.1px; line-height: 1.05; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.go { width: 44px; height: 44px; border-radius: 22px; background: var(--pop); color: #000; display: grid; place-items: center; flex: none; }
-.go svg { width: 18px; height: 18px; margin-left: 2px; }
+.plan-row:active { opacity: .5; }
+.plan-row span { font-size: 46px; font-weight: 700; letter-spacing: -1.6px; line-height: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plan-row svg { width: 30px; height: 30px; color: var(--pop); flex: none; }
 .empty { text-align: center; color: var(--label2); padding: 26px 20px; font-size: 15px; line-height: 21px; }
 .empty b { display: block; color: var(--label); font-size: 19px; font-weight: 700; letter-spacing: -.5px; margin-bottom: 4px; }
 

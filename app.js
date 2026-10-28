@@ -2,7 +2,7 @@
 /* gym: daily weigh-in + workout tracker with planned progression.
    Data lives on the device (localStorage), with optional automatic backup to a private GitHub repo. */
 
-const VERSION = '2.4';
+const VERSION = '2.5';
 const KEY = 'gym.v2';
 const OLD_KEY = 'lift.v1';
 const SYNC_KEY = 'gym.sync';
@@ -75,10 +75,10 @@ const I = {
   chevR: sv('<path d="M9 5l7 7-7 7"/>', 2.6),
   chevD: sv('<path d="M5 9l7 7 7-7"/>', 2.6),
   chevU: sv('<path d="M5 15l7-7 7 7"/>', 2.6),
+  arrowR: sv('<path d="M5 12h14M13 6l6 6-6 6"/>', 2.2),
   dots: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
   trophy: sv('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>', 2.2),
   search: sv('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>', 2.2),
-  play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 8 5.2z"/></svg>',
 };
 
 // ---------- Helpers ----------
@@ -364,9 +364,9 @@ function tipHTML() {
 
 function scWorkout() {
   return nav({ title: 'workout', right: `<button class="icon-btn" data-a="settings" aria-label="Settings">${I.gear}</button>` }) +
-    `<div class="kicker">${shortDay(Date.now())}</div><h1 class="large-title">workout</h1>` + tipHTML() +
-    `<div class="section">${S.plans.map(p => `<button class="plan-tile" data-a="plan-go" data-id="${p.id}"><h3>${esc(p.name || 'untitled')}</h3><span class="go">${I.play}</span></button>`).join('') ||
-      `<div class="card empty"><b>No plans yet</b>Add one in settings.</div>`}</div>`;
+    `<div class="kicker">${shortDay(Date.now())}</div>` +
+    `<div class="plans">${S.plans.map(p => `<button class="plan-row" data-a="plan-go" data-id="${p.id}"><span>${esc(p.name || 'untitled')}</span>${I.arrowR}</button>`).join('') ||
+      `<div class="empty"><b>No plans yet</b>Add one in settings.</div>`}</div>` + tipHTML();
 }
 
 function scPlan({ id }) {
